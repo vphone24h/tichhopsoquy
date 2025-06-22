@@ -10,6 +10,8 @@ import {
   endOfMonth,
   format,
 } from "date-fns";
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
 
 // ======= Format số tiền: tách 3 số =======
 function formatNumberInput(val) {
@@ -184,7 +186,7 @@ function FilterTime({ filter, setFilter }) {
   );
 }
 
-// 3. MAIN COMPONENT (Bộ lọc phía trên bảng)
+// 3. MAIN COMPONENT (Bộ lọc phía trên bảng + Xuất Excel)
 export default function Cashbook() {
   // Danh sách nguồn tiền
   const sourcesArr = [
@@ -275,42 +277,68 @@ export default function Cashbook() {
     setEditingBalance(false);
   };
 
+  // ===== XUẤT EXCEL =====
+  function handleExportExcel() {
+    const exportData = data.map((item, idx) => ({
+      "STT": idx + 1,
+      "Mã phiếu": item.code || item._id,
+      "Thời gian": item.date ? format(new Date(item.date), "dd/MM/yyyy HH:mm") : "",
+      "Loại thu chi": item.content || item.type,
+      "Người nộp/nhận": item.person || item.customer || item.supplier,
+      "Nguồn": item.source === "tien_mat"
+        ? "Tiền mặt"
+        : item.source === "the"
+        ? "Thẻ"
+        : item.source === "vi_dien_tu"
+        ? "Ví điện tử"
+        : "",
+      "Giá trị": item.amount,
+      "Ghi chú": item.note || "",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "ThuChi");
+
+    const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    saveAs(new Blob([excelBuffer], { type: "application/octet-stream" }), "so_quy_thu_chi.xlsx");
+  }
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       {/* Tổng hợp từng nguồn */}
-     <div className="flex gap-6 mb-8 justify-center">
-  {summaryBySource.map(src => (
-    <div
-      key={src.key}
-      className="rounded-2xl shadow bg-white border border-purple-200 min-w-[210px] px-6 py-5 flex flex-col items-center"
-    >
-      <div className="font-extrabold text-3xl mb-2" style={{ color: '#7c3aed', letterSpacing: '1px' }}>
-        {src.label}
+      <div className="flex gap-6 mb-8 justify-center">
+        {summaryBySource.map(src => (
+          <div
+            key={src.key}
+            className="rounded-2xl shadow bg-white border border-purple-200 min-w-[210px] px-6 py-5 flex flex-col items-center"
+          >
+            <div className="font-extrabold text-3xl mb-2" style={{ color: '#7c3aed', letterSpacing: '1px' }}>
+              {src.label}
+            </div>
+            <div className="flex flex-col items-center mb-2 mt-1">
+              <span className="text-xs text-gray-600 font-semibold mb-0.5">Đầu kỳ</span>
+              <span className="font-extrabold text-fuchsia-800 text-3xl">
+                {src.opening.toLocaleString("vi-VN")}
+              </span>
+            </div>
+            <div className="flex flex-col w-full gap-1">
+              <div className="flex justify-between w-full">
+                <span className="text-xs text-gray-700">Thu</span>
+                <span className="font-bold text-blue-600">{src.thu.toLocaleString("vi-VN")}</span>
+              </div>
+              <div className="flex justify-between w-full">
+                <span className="text-xs text-gray-700">Chi</span>
+                <span className="font-bold text-red-500">{src.chi.toLocaleString("vi-VN")}</span>
+              </div>
+              <div className="flex justify-between w-full border-t border-gray-200 pt-1 mt-1">
+                <span className="text-xs text-gray-700">Tồn</span>
+                <span className="font-bold text-green-600">{src.ton.toLocaleString("vi-VN")}</span>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
-      <div className="flex flex-col items-center mb-2 mt-1">
-        <span className="text-xs text-gray-600 font-semibold mb-0.5">Đầu kỳ</span>
-        <span className="font-extrabold text-fuchsia-800 text-3xl">
-          {src.opening.toLocaleString("vi-VN")}
-        </span>
-      </div>
-      <div className="flex flex-col w-full gap-1">
-        <div className="flex justify-between w-full">
-          <span className="text-xs text-gray-700">Thu</span>
-          <span className="font-bold text-blue-600">{src.thu.toLocaleString("vi-VN")}</span>
-        </div>
-        <div className="flex justify-between w-full">
-          <span className="text-xs text-gray-700">Chi</span>
-          <span className="font-bold text-red-500">{src.chi.toLocaleString("vi-VN")}</span>
-        </div>
-        <div className="flex justify-between w-full border-t border-gray-200 pt-1 mt-1">
-          <span className="text-xs text-gray-700">Tồn</span>
-          <span className="font-bold text-green-600">{src.ton.toLocaleString("vi-VN")}</span>
-        </div>
-      </div>
-    </div>
-  ))}
-</div>
-
 
       {/* Thanh action + tổng hợp tổng */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-4">
@@ -420,7 +448,7 @@ export default function Cashbook() {
             <option>Phiếu chi</option>
           </select>
         </div>
-        <div className="flex-1 flex items-end">
+        <div className="flex-1 flex items-end gap-2">
           <input
             className="border rounded px-2 py-1 w-full"
             placeholder="🔍 Tìm mã phiếu, nội dung..."
@@ -429,6 +457,12 @@ export default function Cashbook() {
               setFilter({ ...filter, search: e.target.value })
             }
           />
+          <button
+            onClick={handleExportExcel}
+            className="bg-purple-700 hover:bg-purple-900 text-white font-semibold px-4 py-2 rounded shadow"
+          >
+            Xuất Excel
+          </button>
         </div>
       </div>
 
